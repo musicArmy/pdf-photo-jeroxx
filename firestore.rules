@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // All shared works sync for admin dashboard
+    match /shared_works/{workId} {
+      allow read, write: if true;
+    }
+
+    // Admin configs
+    match /admin_config/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

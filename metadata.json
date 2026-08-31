@@ -1,0 +1,6 @@
+{
+  "name": "Photo to PDF & Passport Studio",
+  "description": "Convert Images to PDF, PDF to Images, create standard 6-in-a-row A4 printable passport photos, and print Aadhaar & ID card copies on A4 sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "shared_works": {
+      "title": "Shared Work Items",
+      "description": "User works saved with explicit consent for admin review and cross-session access",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Title of the generated work"
+        },
+        "toolType": {
+          "type": "string",
+          "description": "Tool used: id-card-print, passport-photo, photo-to-pdf, pdf-to-photo"
+        },
+        "thumbnailUrl": {
+          "type": "string",
+          "description": "Compressed preview image data URL"
+        },
+        "details": {
+          "type": "string",
+          "description": "Summary details of the work"
+        },
+        "fileSizeText": {
+          "type": "string",
+          "description": "File format / size info"
+        },
+        "userConsent": {
+          "type": "boolean",
+          "description": "Explicit user consent granted"
+        },
+        "itemCount": {
+          "type": "number",
+          "description": "Number of pages or photos processed"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "clientTag": {
+          "type": "string",
+          "description": "Random client session identifier"
+        }
+      },
+      "required": ["title", "toolType", "userConsent", "createdAt"]
+    },
+    "admin_config": {
+      "title": "Admin Configuration",
+      "description": "Settings for owner dashboard access",
+      "type": "object",
+      "properties": {
+        "initialized": {
+          "type": "boolean",
+          "description": "Whether owner portal is active"
+        }
+      }
+    }
+  }
+}
