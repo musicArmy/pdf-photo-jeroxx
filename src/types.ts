@@ -36,18 +36,22 @@ export interface UploadedImage {
   file?: File;
   name: string;
   dataUrl: string;
+  originalDataUrl?: string;
   width: number;
   height: number;
   rotation: number; // 0, 90, 180, 270
   size: number;
+  isCropped?: boolean;
 }
 
 export interface PdfPageImage {
   pageNumber: number;
   dataUrl: string;
+  originalDataUrl?: string;
   blob: Blob;
   width: number;
   height: number;
+  isCropped?: boolean;
 }
 
 export type PassportLayoutMode = 

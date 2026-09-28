@@ -33,6 +33,9 @@ export const translations = {
     clearAll: 'सब हटाएं',
     rotate: 'घुमाएं (Rotate)',
     delete: 'हटाएं',
+    crop: 'फोटो काटें / क्रॉप करें',
+    cropBadge: 'क्रॉप किया गया',
+    revertOriginal: 'मूल फोटो पर लौटें',
     dragToReorder: 'क्रम बदलने के लिए खींचें (Drag to Reorder)',
 
     // PDF to Photo
@@ -44,7 +47,9 @@ export const translations = {
     imageQuality: 'क्वालिटी / रिज़ॉल्यूशन',
     stdRes: 'सामान्य (150 DPI)',
     highRes: 'HD प्रिंट क्वालिटी (300 DPI)',
-    ultraRes: 'अल्ट्रा HD (400 DPI)',
+    ultraRes: 'अल्ट्रा HD 4K (400 DPI)',
+    maxRes: 'स्टूडियो 4K+ (600 DPI)',
+    cropPage: 'क्रॉप करें (4K)',
     downloadAllZip: 'सभी फोटो ZIP में डाउनलोड करें',
     downloadPage: 'पेज डाउनलोड करें',
     totalPages: 'कुल पेज:',
@@ -119,6 +124,9 @@ export const translations = {
     clearAll: 'Clear All',
     rotate: 'Rotate',
     delete: 'Delete',
+    crop: 'Crop / Adjust Photo',
+    cropBadge: 'Cropped',
+    revertOriginal: 'Revert to Original',
     dragToReorder: 'Drag to reorder pages',
 
     // PDF to Photo
@@ -130,7 +138,9 @@ export const translations = {
     imageQuality: 'Resolution / Quality',
     stdRes: 'Standard (150 DPI)',
     highRes: 'HD Print (300 DPI)',
-    ultraRes: 'Ultra HD (400 DPI)',
+    ultraRes: 'Ultra HD 4K (400 DPI)',
+    maxRes: 'Studio 4K+ (600 DPI)',
+    cropPage: 'Crop (4K)',
     downloadAllZip: 'Download All in ZIP',
     downloadPage: 'Download Page',
     totalPages: 'Total Pages:',

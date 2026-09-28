@@ -8,6 +8,7 @@ import {
 } from '../utils/pdfToImage';
 import { jsPDF } from 'jspdf';
 import { saveToHistory } from '../utils/historyStorage';
+import { ImageCropModal, CropResult } from './ImageCropModal';
 import confetti from 'canvas-confetti';
 import {
   FileText,
@@ -20,7 +21,9 @@ import {
   ZoomIn,
   CheckCircle,
   FileCheck2,
-  RefreshCw
+  RefreshCw,
+  Crop,
+  Undo2
 } from 'lucide-react';
 
 interface PdfToPhotoTabProps {
@@ -40,6 +43,57 @@ export const PdfToPhotoTab: React.FC<PdfToPhotoTabProps> = ({ language }) => {
   const [dpi, setDpi] = useState<number>(300);
   const [imageFormat, setImageFormat] = useState<'png' | 'jpeg'>('png');
   const [selectedPreviewImage, setSelectedPreviewImage] = useState<PdfPageImage | null>(null);
+  const [cropPageTarget, setCropPageTarget] = useState<PdfPageImage | null>(null);
+
+  const handleCropSave = async (result: CropResult) => {
+    if (!cropPageTarget) return;
+
+    try {
+      const res = await fetch(result.dataUrl);
+      const blob = await res.blob();
+
+      setPageImages((prev) =>
+        prev.map((item) =>
+          item.pageNumber === cropPageTarget.pageNumber
+            ? {
+                ...item,
+                dataUrl: result.dataUrl,
+                originalDataUrl: item.originalDataUrl || item.dataUrl,
+                blob,
+                width: result.width,
+                height: result.height,
+                isCropped: true,
+              }
+            : item
+        )
+      );
+
+      confetti({
+        particleCount: 40,
+        spread: 45,
+        origin: { y: 0.7 },
+      });
+    } catch (err) {
+      console.error('Error saving cropped page image:', err);
+    } finally {
+      setCropPageTarget(null);
+    }
+  };
+
+  const revertPageCrop = (pageNumber: number) => {
+    setPageImages((prev) =>
+      prev.map((item) => {
+        if (item.pageNumber === pageNumber && item.originalDataUrl) {
+          return {
+            ...item,
+            dataUrl: item.originalDataUrl,
+            isCropped: false,
+          };
+        }
+        return item;
+      })
+    );
+  };
 
   const handlePdfUpload = async (file: File, targetDpi: number = dpi) => {
     if (!file) return;
@@ -305,6 +359,7 @@ export const PdfToPhotoTab: React.FC<PdfToPhotoTabProps> = ({ language }) => {
                   { value: 150, label: '150 DPI' },
                   { value: 300, label: '300 DPI (HD)' },
                   { value: 400, label: '400 DPI (4K)' },
+                  { value: 600, label: '600 DPI (Ultra 4K+)' },
                 ].map((d) => (
                   <button
                     key={d.value}
@@ -369,36 +424,69 @@ export const PdfToPhotoTab: React.FC<PdfToPhotoTabProps> = ({ language }) => {
                 className="bg-slate-950/90 rounded-2xl border border-slate-800 p-3 flex flex-col justify-between shadow-sm hover:border-slate-700 transition-all group"
               >
                 {/* Image Canvas Box */}
-                <div className="relative bg-white rounded-xl overflow-hidden aspect-[3/4] flex items-center justify-center p-1 cursor-pointer"
-                     onClick={() => setSelectedPreviewImage(page)}>
+                <div
+                  className="relative bg-white rounded-xl overflow-hidden aspect-[3/4] flex items-center justify-center p-1 cursor-pointer"
+                  onClick={() => setSelectedPreviewImage(page)}
+                >
                   <img
                     src={page.dataUrl}
                     alt={`Page ${page.pageNumber}`}
                     className="max-h-full max-w-full object-contain"
                   />
-                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity gap-2">
                     <span className="px-3 py-1.5 rounded-lg bg-slate-900/90 backdrop-blur-md text-white text-xs font-semibold flex items-center gap-1.5 border border-slate-700">
                       <ZoomIn className="w-3.5 h-3.5" />
                       {language === 'hi' ? 'बड़ा देखें' : 'View Full'}
                     </span>
                   </div>
-                  <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-md text-[11px] font-bold text-white border border-slate-700">
-                    {t.pageNumber} {page.pageNumber}
+                  <div className="absolute top-2 left-2 flex items-center gap-1">
+                    <span className="px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-md text-[11px] font-bold text-white border border-slate-700">
+                      {t.pageNumber} {page.pageNumber}
+                    </span>
+                    {page.isCropped && (
+                      <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                        {t.cropBadge || 'Cropped'}
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 {/* Page Details & Action */}
-                <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                  <div className="text-[10px] text-slate-400">
-                    {page.width} × {page.height} px
+                <div className="mt-3 pt-2 border-t border-slate-800/80 flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{page.width} × {page.height} px</span>
+                    {page.isCropped && page.originalDataUrl && (
+                      <button
+                        onClick={() => revertPageCrop(page.pageNumber)}
+                        className="text-amber-400 hover:underline flex items-center gap-0.5 text-[10px]"
+                        title={t.revertOriginal || 'Revert'}
+                      >
+                        <Undo2 className="w-3 h-3" />
+                        <span>{language === 'hi' ? 'रीसेट' : 'Revert'}</span>
+                      </button>
+                    )}
                   </div>
-                  <button
-                    onClick={() => downloadSinglePageImage(page, pdfFileName, imageFormat)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>{t.downloadPage}</span>
-                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Crop Button */}
+                    <button
+                      onClick={() => setCropPageTarget(page)}
+                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                      title={language === 'hi' ? 'मनचाहा भाग क्रॉप करें (4K)' : 'Crop any part in 4K'}
+                    >
+                      <Crop className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{t.cropPage || 'Crop (4K)'}</span>
+                    </button>
+
+                    {/* Download Button */}
+                    <button
+                      onClick={() => downloadSinglePageImage(page, pdfFileName, imageFormat)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-700"
+                      title={t.downloadPage}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -415,6 +503,16 @@ export const PdfToPhotoTab: React.FC<PdfToPhotoTabProps> = ({ language }) => {
                 {pdfFileName} — {t.pageNumber} {selectedPreviewImage.pageNumber}
               </span>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setCropPageTarget(selectedPreviewImage);
+                    setSelectedPreviewImage(null);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5"
+                >
+                  <Crop className="w-3.5 h-3.5" />
+                  <span>{t.cropPage || 'Crop (4K)'}</span>
+                </button>
                 <button
                   onClick={() => downloadSinglePageImage(selectedPreviewImage, pdfFileName, imageFormat)}
                   className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5"
@@ -439,6 +537,19 @@ export const PdfToPhotoTab: React.FC<PdfToPhotoTabProps> = ({ language }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Flexible 4K Cropping Modal */}
+      {cropPageTarget && (
+        <ImageCropModal
+          isOpen={!!cropPageTarget}
+          imageUrl={cropPageTarget.originalDataUrl || cropPageTarget.dataUrl}
+          imageTitle={`${pdfFileName || 'document'}_page_${cropPageTarget.pageNumber}`}
+          language={language}
+          onClose={() => setCropPageTarget(null)}
+          onApplyCrop={handleCropSave}
+          allowDirectDownload={true}
+        />
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { translations } from '../utils/i18n';
 import { convertImagesToPdf, downloadPdfBlob } from '../utils/imageToPdf';
 import { createSampleDocumentImage } from '../utils/sampleData';
 import { saveToHistory } from '../utils/historyStorage';
+import { ImageCropModal, CropResult } from './ImageCropModal';
 import confetti from 'canvas-confetti';
 import {
   Upload,
@@ -19,7 +20,9 @@ import {
   CheckCircle2,
   Sparkles,
   Loader2,
-  Printer
+  Printer,
+  Crop,
+  Undo2
 } from 'lucide-react';
 
 interface PhotoToPdfTabProps {
@@ -35,6 +38,7 @@ export const PhotoToPdfTab: React.FC<PhotoToPdfTabProps> = ({ language }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<UploadedImage | null>(null);
 
   const [settings, setSettings] = useState<ImageToPdfSettings>({
     pageSize: 'a4',
@@ -61,10 +65,12 @@ export const PhotoToPdfTab: React.FC<PhotoToPdfTabProps> = ({ language }) => {
             file,
             name: file.name,
             dataUrl,
+            originalDataUrl: dataUrl,
             width: img.width,
             height: img.height,
             rotation: 0,
             size: file.size,
+            isCropped: false,
           };
           setImages((prev) => [...prev, newImage]);
         };
@@ -72,6 +78,40 @@ export const PhotoToPdfTab: React.FC<PhotoToPdfTabProps> = ({ language }) => {
       };
       reader.readAsDataURL(file);
     });
+  };
+
+  const handleCropSave = (result: CropResult) => {
+    if (!cropTarget) return;
+    setImages((prev) =>
+      prev.map((item) =>
+        item.id === cropTarget.id
+          ? {
+              ...item,
+              dataUrl: result.dataUrl,
+              originalDataUrl: item.originalDataUrl || item.dataUrl,
+              width: result.width,
+              height: result.height,
+              size: Math.round(result.dataUrl.length * 0.75),
+              isCropped: true,
+            }
+          : item
+      )
+    );
+    setCropTarget(null);
+  };
+
+  const revertCrop = (id: string) => {
+    setImages((prev) =>
+      prev.map((item) =>
+        item.id === id && item.originalDataUrl
+          ? {
+              ...item,
+              dataUrl: item.originalDataUrl,
+              isCropped: false,
+            }
+          : item
+      )
+    );
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -283,13 +323,23 @@ export const PhotoToPdfTab: React.FC<PhotoToPdfTabProps> = ({ language }) => {
                   key={img.id}
                   className="group relative bg-slate-950/90 rounded-xl border border-slate-800/90 p-2 overflow-hidden flex flex-col shadow-sm hover:border-slate-600 transition-all"
                 >
-                  {/* Page Badge */}
-                  <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-md text-[10px] font-bold text-white border border-slate-700">
-                    #{index + 1}
+                  {/* Page Badge & Cropped Indicator */}
+                  <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
+                    <span className="px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-md text-[10px] font-bold text-white border border-slate-700">
+                      #{index + 1}
+                    </span>
+                    {img.isCropped && (
+                      <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-bold">
+                        {t.cropBadge || 'Cropped'}
+                      </span>
+                    )}
                   </div>
 
                   {/* Thumbnail Image Container */}
-                  <div className="w-full aspect-[3/4] bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center relative">
+                  <div
+                    onClick={() => setCropTarget(img)}
+                    className="w-full aspect-[3/4] bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center relative cursor-pointer group/thumb"
+                  >
                     <img
                       src={img.dataUrl}
                       alt={img.name}
@@ -298,6 +348,12 @@ export const PhotoToPdfTab: React.FC<PhotoToPdfTabProps> = ({ language }) => {
                       }}
                       className="max-h-full max-w-full object-contain transition-transform duration-200"
                     />
+                    <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-600/90 text-white text-[11px] font-bold flex items-center gap-1 shadow-md">
+                        <Crop className="w-3 h-3" />
+                        {language === 'hi' ? 'क्रॉप करें' : 'Crop'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Info */}
@@ -306,7 +362,7 @@ export const PhotoToPdfTab: React.FC<PhotoToPdfTabProps> = ({ language }) => {
                       {img.name}
                     </p>
                     <p className="text-[9px] text-slate-500">
-                      {Math.round(img.size / 1024)} KB
+                      {img.width} × {img.height} px • {Math.round(img.size / 1024)} KB
                     </p>
                   </div>
 
@@ -332,6 +388,30 @@ export const PhotoToPdfTab: React.FC<PhotoToPdfTabProps> = ({ language }) => {
                     </div>
 
                     <div className="flex items-center gap-1">
+                      {/* Crop Button */}
+                      <button
+                        title={t.crop || 'Crop'}
+                        onClick={() => setCropTarget(img)}
+                        className={`p-1 rounded text-xs flex items-center ${
+                          img.isCropped
+                            ? 'bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30'
+                            : 'bg-slate-800/80 text-slate-400 hover:text-emerald-400'
+                        }`}
+                      >
+                        <Crop className="w-3 h-3" />
+                      </button>
+
+                      {/* Revert if Cropped */}
+                      {img.isCropped && img.originalDataUrl && (
+                        <button
+                          title={t.revertOriginal || 'Revert'}
+                          onClick={() => revertCrop(img.id)}
+                          className="p-1 rounded bg-slate-800/80 text-slate-400 hover:text-amber-400"
+                        >
+                          <Undo2 className="w-3 h-3" />
+                        </button>
+                      )}
+
                       <button
                         title={t.rotate}
                         onClick={() => rotateImage(img.id)}
@@ -518,6 +598,19 @@ export const PhotoToPdfTab: React.FC<PhotoToPdfTabProps> = ({ language }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Flexible 4K Image Cropping Modal */}
+      {cropTarget && (
+        <ImageCropModal
+          isOpen={!!cropTarget}
+          imageUrl={cropTarget.originalDataUrl || cropTarget.dataUrl}
+          imageTitle={cropTarget.name}
+          language={language}
+          onClose={() => setCropTarget(null)}
+          onApplyCrop={handleCropSave}
+          allowDirectDownload={true}
+        />
       )}
     </div>
   );
