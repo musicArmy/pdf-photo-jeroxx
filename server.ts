@@ -179,6 +179,62 @@ Return ONLY valid JSON with this exact structure:
   }
 });
 
+// AI Face Detection for Biometric Passport Photo Cropping
+app.post('/api/ai/detect-face', async (req, res) => {
+  try {
+    const { image } = req.body;
+    if (!image) {
+      return res.status(400).json({ error: 'Image data is required.' });
+    }
+
+    const ai = getGeminiClient();
+    if (!ai) {
+      return res.status(503).json({ error: 'AI client not initialized.' });
+    }
+
+    const match = image.match(/^data:([^;]+);base64,(.+)$/);
+    const mimeType = match ? match[1] : 'image/jpeg';
+    const base64Data = match ? match[2] : image;
+
+    const prompt = `Detect the primary human face in this photo for cropping an official passport photo.
+Return ONLY valid JSON with this exact schema:
+{
+  "detected": true,
+  "box_2d": [ymin, xmin, ymax, xmax],
+  "confidence": 0.96
+}
+Note: ymin, xmin, ymax, xmax must be normalized integers from 0 to 1000 representing [top, left, bottom, right] of the face/head.
+If no face is detected, return:
+{
+  "detected": false,
+  "box_2d": null,
+  "confidence": 0
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        {
+          inlineData: {
+            mimeType,
+            data: base64Data,
+          },
+        },
+        { text: prompt },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    res.json(parsed);
+  } catch (error: any) {
+    console.error('Error in /api/ai/detect-face:', error);
+    res.status(500).json({ error: error.message || 'Face detection failed.' });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

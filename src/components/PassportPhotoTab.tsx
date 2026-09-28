@@ -36,8 +36,15 @@ import {
   Grid,
   ShieldAlert,
   Wand2,
-  Hand
+  Hand,
+  ScanFace,
+  Loader2
 } from 'lucide-react';
+import {
+  detectFace,
+  calculateOptimalPassportCrop,
+  DetectedFace
+} from '../utils/faceDetection';
 
 interface PassportPhotoTabProps {
   language: Language;
@@ -52,6 +59,15 @@ export const PassportPhotoTab: React.FC<PassportPhotoTabProps> = ({ language }) 
   const [sourceImageName, setSourceImageName] = useState<string>('photo');
   const [settings, setSettings] = useState<PassportSettings>(DEFAULT_PASSPORT_SETTINGS);
   const [showFaceGuide, setShowFaceGuide] = useState<boolean>(true);
+
+  // Auto Face Detection state
+  const [isDetectingFace, setIsDetectingFace] = useState<boolean>(false);
+  const [detectedFace, setDetectedFace] = useState<DetectedFace | null>(null);
+  const [faceDetectionStatus, setFaceDetectionStatus] = useState<{
+    type: 'success' | 'none' | 'detecting';
+    message: string;
+    details?: string;
+  } | null>(null);
 
   // Previews
   const [singlePreviewUrl, setSinglePreviewUrl] = useState<string | null>(null);
@@ -102,12 +118,82 @@ export const PassportPhotoTab: React.FC<PassportPhotoTabProps> = ({ language }) 
     };
   }, [sourceImage, settings]);
 
+  const runAutoFaceCrop = useCallback(async (imageSrc: string) => {
+    setIsDetectingFace(true);
+    setFaceDetectionStatus({
+      type: 'detecting',
+      message: language === 'hi' ? 'चेहरे का पता लगाया जा रहा है...' : 'Detecting face area for optimal passport crop...',
+    });
+
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('Failed to load image.'));
+        img.src = imageSrc;
+      });
+
+      const face = await detectFace(img);
+      if (face) {
+        setDetectedFace(face);
+        const suggestion = calculateOptimalPassportCrop(
+          img.naturalWidth,
+          img.naturalHeight,
+          face,
+          settings.photoWidthMm,
+          settings.photoHeightMm
+        );
+
+        setSettings((prev) => ({
+          ...prev,
+          zoom: suggestion.zoom,
+          cropX: suggestion.cropX,
+          cropY: suggestion.cropY,
+        }));
+
+        const sourceLabel = face.source === 'ai' ? 'AI' : face.source === 'native' ? 'Biometric' : 'Smart CV';
+        setFaceDetectionStatus({
+          type: 'success',
+          message:
+            language === 'hi'
+              ? `चेहरा पहचाना गया (${sourceLabel})! 70% बायोमेट्रिक पासपोर्ट क्रॉप सेट हुआ।`
+              : `Face detected (${sourceLabel})! Optimal 70% ICAO passport crop applied.`,
+          details: `Head Size: ~70% • Eye-line aligned • Zoom: ${Math.round(suggestion.zoom * 100)}%`,
+        });
+      } else {
+        setDetectedFace(null);
+        setFaceDetectionStatus({
+          type: 'none',
+          message:
+            language === 'hi'
+              ? 'चेहरा स्पष्ट नहीं मिला, मानक सेंटर पासपोर्ट क्रॉप रखा गया।'
+              : 'Face not clearly detected. Standard centered crop retained.',
+        });
+      }
+    } catch (err) {
+      console.error('Error in face detection:', err);
+      setFaceDetectionStatus({
+        type: 'none',
+        message:
+          language === 'hi'
+            ? 'ऑटो डिटेक्ट पूरा नहीं हो सका। आप स्लाइड करके पोजीशन सेट कर सकते हैं।'
+            : 'Could not auto-detect. You can drag and zoom manually.',
+      });
+    } finally {
+      setIsDetectingFace(false);
+    }
+  }, [language, settings.photoWidthMm, settings.photoHeightMm]);
+
   const handleFileUpload = (file: File) => {
     if (!file || !file.type.startsWith('image/')) return;
     setSourceImageName(file.name.replace(/\.[^/.]+$/, ''));
     const reader = new FileReader();
     reader.onload = (e) => {
-      setSourceImage(e.target?.result as string);
+      const dataUrl = e.target?.result as string;
+      setSourceImage(dataUrl);
+      // Automatically detect face area and suggest optimal passport crop
+      runAutoFaceCrop(dataUrl);
     };
     reader.readAsDataURL(file);
   };
@@ -121,6 +207,7 @@ export const PassportPhotoTab: React.FC<PassportPhotoTabProps> = ({ language }) 
       personName: 'AMAN CHAUHAN',
       photoDate: new Date().toLocaleDateString('en-GB'),
     }));
+    runAutoFaceCrop(sample);
   };
 
   const handlePrint = async () => {
@@ -423,24 +510,41 @@ export const PassportPhotoTab: React.FC<PassportPhotoTabProps> = ({ language }) 
           <div className="lg:col-span-5 space-y-4">
             {/* Single Photo Studio Crop Box */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl backdrop-blur-sm">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Crop className="w-4 h-4 text-amber-400" />
-                  <span className="font-bold text-white text-sm">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800 gap-2 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Crop className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="font-bold text-white text-sm truncate">
                     {language === 'hi' ? 'सिंगल पासपोर्ट फोटो प्रीव्यू (3.5 × 4.5 cm)' : 'Single Passport Preview (3.5 × 4.5 cm)'}
                   </span>
                 </div>
-                <button
-                  onClick={() => setShowFaceGuide(!showFaceGuide)}
-                  className={`text-xs px-2.5 py-1 rounded-md border font-semibold transition-colors ${
-                    showFaceGuide
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      : 'bg-slate-800 text-slate-400 border-slate-700'
-                  }`}
-                  title="Toggle Face Alignment Oval"
-                >
-                  {showFaceGuide ? '🎯 गाइड चालू' : 'गाइड बंद'}
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => sourceImage && runAutoFaceCrop(sourceImage)}
+                    disabled={isDetectingFace}
+                    className="text-xs px-2.5 py-1 rounded-lg border font-bold transition-all bg-gradient-to-r from-amber-600/30 to-orange-600/30 hover:from-amber-600/50 hover:to-orange-600/50 text-amber-200 border-amber-500/40 flex items-center gap-1.5 shadow-sm disabled:opacity-50 hover:scale-105 active:scale-95"
+                    title={language === 'hi' ? 'चेहरे को ऑटो-डिटेक्ट कर पासपोर्ट साइज के लिए ऑप्टिमल क्रॉप सेट करें' : 'Automatically detect face area and crop to optimal passport size'}
+                  >
+                    {isDetectingFace ? (
+                      <Loader2 className="w-3.5 h-3.5 text-amber-300 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    )}
+                    <span>{isDetectingFace ? (language === 'hi' ? 'डिटेक्ट हो रहा...' : 'Detecting...') : (language === 'hi' ? '✨ ऑटो फेस क्रॉप' : '✨ Auto Face Crop')}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowFaceGuide(!showFaceGuide)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-colors ${
+                      showFaceGuide
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                    title="Toggle Face Alignment Oval"
+                  >
+                    {showFaceGuide ? '🎯 गाइड चालू' : 'गाइड बंद'}
+                  </button>
+                </div>
               </div>
 
               {/* Crop Frame Box with Direct Touch & Mouse Slide Gestures */}
@@ -471,6 +575,19 @@ export const PassportPhotoTab: React.FC<PassportPhotoTabProps> = ({ language }) 
                     />
                   ) : (
                     <div className="text-xs text-slate-500">Generating...</div>
+                  )}
+
+                  {/* Face scanning radar overlay */}
+                  {isDetectingFace && (
+                    <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 z-20 pointer-events-none">
+                      <div className="relative w-24 h-28 rounded-3xl border-2 border-dashed border-amber-400/80 flex items-center justify-center animate-pulse">
+                        <ScanFace className="w-10 h-10 text-amber-400/90" />
+                        <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-amber-300 to-transparent top-1/2 -translate-y-1/2 animate-bounce" />
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-300 bg-slate-950/90 px-2 py-0.5 rounded-full border border-amber-500/40">
+                        {language === 'hi' ? 'चेहरे का पता लगाया जा रहा है...' : 'Scanning face area...'}
+                      </span>
+                    </div>
                   )}
 
                   {/* Face Guidelines Overlay */}
@@ -524,6 +641,46 @@ export const PassportPhotoTab: React.FC<PassportPhotoTabProps> = ({ language }) 
                     </span>
                   </div>
                 </div>
+
+                {/* Face Detection Status Banner */}
+                {faceDetectionStatus && (
+                  <div
+                    className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 transition-all ${
+                      faceDetectionStatus.type === 'success'
+                        ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                        : faceDetectionStatus.type === 'detecting'
+                        ? 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                        : 'bg-slate-900 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {faceDetectionStatus.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : faceDetectionStatus.type === 'detecting' ? (
+                        <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+                      ) : (
+                        <ScanFace className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-[11px] truncate leading-tight">
+                          {faceDetectionStatus.message}
+                        </p>
+                        {faceDetectionStatus.details && (
+                          <p className="text-[10px] text-emerald-300/80 truncate">
+                            {faceDetectionStatus.details}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {faceDetectionStatus.type === 'success' && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0 flex items-center gap-1">
+                        <Sparkles className="w-2.5 h-2.5 text-emerald-300" />
+                        ICAO 70%
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Direct Slide-to-Zoom Bar */}
                 <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/90 space-y-1.5">
